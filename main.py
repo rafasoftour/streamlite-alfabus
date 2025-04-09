@@ -1,2 +1,35 @@
 import streamlit as st
-st.title("Estudio alfabus")
+from datetime import datetime, timedelta
+from utils.soc_utils import show_soc_analysis
+
+st.set_page_config("Análisis Vehículos Eléctricos", layout="wide")
+
+def main():
+    st.sidebar.title("🔧 Panel de control")
+    page = st.sidebar.selectbox(
+        "Selecciona un estudio",
+        [
+            "Inicio",
+            "SOC por fecha y vehículo",
+            # "Consumo energético",
+            # "Temperaturas",
+            # "Eventos de carga",
+            # etc.
+        ]
+    )
+
+    # Definir la fecha de ayer como valor por defecto
+    ayer = datetime.now() - timedelta(days=1)
+    fecha_default = ayer.date()
+    api_key = "cab94416ab19e7a249d6c1469c36b3c81ed3c33a7ed7fc67cab4df91e1ace823"
+
+    if page == "Inicio":
+        st.title("🚍 Análisis de Vehículos Eléctricos")
+        st.write("Selecciona una opción en el menú lateral para comenzar.")
+        st.info("Este visor permite analizar la eficiencia de carga y uso de los vehículos eléctricos.")
+
+    elif page == "SOC por fecha y vehículo":
+        show_soc_analysis(fecha_default, api_key)
+
+if __name__ == "__main__":
+    main()
