@@ -106,7 +106,6 @@ def show_soc_analysis(fecha_default, api_key):
         # Mostrar el estado del vehículo
         show_vehicle_status(matricula, fecha, api_key)
 
-
 def show_vehicle_status(matricula, fecha, api_key):
     """Mostrar los registros del estado de un vehículo (carga, estatus de batería y estatus de vehículo)"""
     st.subheader("📋 Estado del vehículo")
@@ -131,17 +130,17 @@ def show_vehicle_status(matricula, fecha, api_key):
             df_status = pd.DataFrame(data)
             df_status["evTime"] = pd.to_datetime(df_status["evTime"])
 
-            # Mapeo de los estados
-            gbStatus_map = {"Start": 1, "Stop": 2}  # Asignar valores numéricos
-            gbCharge_map = {"Exceptions": 1, "Charging": 2, "Complete": 3, "Not in Charging": 4}
-            evStatus_map = {"Charging": 1, "Parking": 2, "Driving": 3}  # Añadir mapeo de evStatus
+            # Mostrar tabla de datos
+            st.dataframe(df_status[["evTime", "gbCharge", "gbStatus", "evStatus"]])
+
+            # Convertir los estados a valores numéricos para graficarlos
+            gbStatus_map = {"Start": 1, "Stop": 2, "Idle": 3}  # Asignar valores numéricos
+            gbCharge_map = {"Charging": 1, "Not in Charging": 0}  # 1: Charging, 0: Not in Charging
+            evStatus_map = {"Active": 1, "Inactive": 2, "Error": 3}  # Mapear los posibles estados de evStatus
 
             df_status["gbStatus_num"] = df_status["gbStatus"].map(gbStatus_map)
             df_status["gbCharge_num"] = df_status["gbCharge"].map(gbCharge_map)
             df_status["evStatus_num"] = df_status["evStatus"].map(evStatus_map)
-
-            # Mostrar tabla de datos
-            st.dataframe(df_status[["evTime", "gbCharge", "gbStatus", "evStatus"]])
 
             # Gráfica para gbStatus
             fig_status = go.Figure()
@@ -157,7 +156,7 @@ def show_vehicle_status(matricula, fecha, api_key):
                 title="Estado del vehículo (gbStatus) a lo largo del día",
                 xaxis_title="Hora",
                 yaxis_title="Estado (gbStatus)",
-                yaxis=dict(tickvals=[1, 2], ticktext=["Start", "Stop"]),
+                yaxis=dict(tickvals=[1, 2, 3], ticktext=["Start", "Stop", "Idle"]),
                 height=400,
                 showlegend=True,
                 hovermode="x unified"
@@ -179,7 +178,7 @@ def show_vehicle_status(matricula, fecha, api_key):
                 title="Estado de carga del vehículo (gbCharge) a lo largo del día",
                 xaxis_title="Hora",
                 yaxis_title="Estado de carga (gbCharge)",
-                yaxis=dict(tickvals=[1, 2, 3, 4], ticktext=["Exceptions", "Charging", "Complete", "Not in Charging"]),
+                yaxis=dict(tickvals=[0, 1], ticktext=["No en carga", "En carga"]),
                 height=400,
                 showlegend=True,
                 hovermode="x unified"
@@ -201,7 +200,7 @@ def show_vehicle_status(matricula, fecha, api_key):
                 title="Estado del vehículo (evStatus) a lo largo del día",
                 xaxis_title="Hora",
                 yaxis_title="Estado (evStatus)",
-                yaxis=dict(tickvals=[1, 2, 3], ticktext=["Charging", "Parking", "Driving"]),
+                yaxis=dict(tickvals=[1, 2, 3], ticktext=["Activo", "Inactivo", "Error"]),
                 height=400,
                 showlegend=True,
                 hovermode="x unified"
@@ -214,6 +213,115 @@ def show_vehicle_status(matricula, fecha, api_key):
     else:
         st.error(f"Error al consultar el estado del vehículo: {response.status_code}")
 
+    """Mostrar los registros del estado de un vehículo (carga y estatus)"""
+    st.subheader("📋 Estado del vehículo")
 
+    base_url = f"http://localhost:3000/plannerstats/BI/vehiculoiot-status"
+    params = {
+        "fecha": fecha.strftime("%Y-%m-%d"),
+        "matricula": matricula
+    }
 
+    headers = {
+        "x-api-key": api_key
+    }
 
+    with st.spinner("Obteniendo estado del vehículo..."):
+        response = requests.get(base_url, params=params, headers=headers)
+
+    if response.status_code == 200:
+        data = response.json()
+
+        if data:
+            df_status = pd.DataFrame(data)
+            df_status["evTime"] = pd.to_datetime(df_status["evTime"])
+
+            # Mostrar tabla de datos
+            # st.dataframe(df_status[["evTime", "gbCharge", "gbStatus"]])
+
+            # Convertir los estados a valores numéricos para graficarlos
+            gbStatus_map = {"Start": 1, "Stop": 2, "Idle": 3}  # Asignar valores numéricos
+            gbCharge_map = {"Charging": 1, "Not in Charging": 0}  # 1: Charging, 0: Not in Charging
+
+            df_status["gbStatus_num"] = df_status["gbStatus"].map(gbStatus_map)
+            df_status["gbCharge_num"] = df_status["gbCharge"].map(gbCharge_map)
+
+            # Gráfica para gbStatus
+            fig_status = go.Figure()
+
+            fig_status.add_trace(go.Scatter(
+                x=df_status["evTime"],
+                y=df_status["gbStatus_num"],
+                mode="markers+lines",
+                name="gbStatus",
+                marker=dict(color="blue", size=8)
+            ))
+
+            fig_status.update_layout(
+                title="Estado del vehículo (gbStatus) a lo largo del día",
+                xaxis_title="Hora",
+                yaxis_title="Estado (gbStatus)",
+                yaxis=dict(tickvals=[1, 2, 3], ticktext=["Start", "Stop", "Idle"]),
+                height=400,
+                showlegend=True,
+                hovermode="x unified"
+            )
+
+            st.plotly_chart(fig_status, use_container_width=True)
+
+            # Gráfica para gbCharge
+            fig_charge = go.Figure()
+
+            fig_charge.add_trace(go.Scatter(
+                x=df_status["evTime"],
+                y=df_status["gbCharge_num"],
+                mode="markers+lines",
+                name="gbCharge",
+                marker=dict(color="green", size=8)
+            ))
+
+            fig_charge.update_layout(
+                title="Estado de carga del vehículo (gbCharge) a lo largo del día",
+                xaxis_title="Hora",
+                yaxis_title="Estado de carga (gbCharge)",
+                yaxis=dict(tickvals=[0, 1], ticktext=["No en carga", "En carga"]),
+                height=400,
+                showlegend=True,
+                hovermode="x unified"
+            )
+
+            st.plotly_chart(fig_charge, use_container_width=True)
+
+        else:
+            st.warning("No se encontraron registros de estado para este vehículo.")
+    else:
+        st.error(f"Error al consultar el estado del vehículo: {response.status_code}")
+
+    """Mostrar los registros del estado de un vehículo (carga y estatus)"""
+    st.subheader("📋 Estado del vehículo")
+
+    base_url = f"http://localhost:3000/plannerstats/BI/vehiculoiot-status"
+    params = {
+        "fecha": fecha.strftime("%Y-%m-%d"),
+        "matricula": matricula
+    }
+
+    headers = {
+        "x-api-key": api_key
+    }
+
+    with st.spinner("Obteniendo estado del vehículo..."):
+        response = requests.get(base_url, params=params, headers=headers)
+
+    if response.status_code == 200:
+        data = response.json()
+
+        if data:
+            df_status = pd.DataFrame(data)
+            df_status["evTime"] = pd.to_datetime(df_status["evTime"])
+
+            st.dataframe(df_status[["evTime", "gbCharge", "gbStatus"]])
+        else:
+            st.warning("No se encontraron registros de estado para este vehículo.")
+    else:
+        st.error(f"Error al consultar el estado del vehículo: {response.status_code}")

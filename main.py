@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import datetime, timedelta
 from utils.soc_utils import show_soc_analysis
+from utils.soc_low import show_low_soc_view
 
 st.set_page_config("Análisis Vehículos Eléctricos", layout="wide")
 
@@ -10,7 +11,9 @@ def main():
         "Selecciona un estudio",
         [
             "Inicio",
+            "Vehículos con SOC bajo (<20%)",
             "SOC por fecha y vehículo",
+
             # "Consumo energético",
             # "Temperaturas",
             # "Eventos de carga",
@@ -30,6 +33,9 @@ def main():
 
     elif page == "SOC por fecha y vehículo":
         show_soc_analysis(fecha_default, api_key)
+
+    elif page == "Vehículos con SOC bajo (<20%)":
+        show_low_soc_view(fecha_default, api_key)
 
 if __name__ == "__main__":
     main()
