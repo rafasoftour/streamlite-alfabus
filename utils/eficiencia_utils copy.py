@@ -10,11 +10,12 @@ def obtener_vehiculos(api_key):
     base_url = "http://localhost:3000/plannerstats/vehiculos"
     headers = {"x-api-key": api_key}
 
-    response = requests.get(base_url, headers=headers)
-    if response.status_code == 200:
+    try:
+        response = requests.get(base_url, headers=headers)
+        response.raise_for_status()
         return response.json()
-    else:
-        st.error(f"Error al obtener los vehículos: {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error al obtener los vehículos: {e}")
         return []
 
 def show_eficiencia_vehiculo(fecha_default, api_key):
@@ -47,24 +48,30 @@ def show_eficiencia_vehiculo(fecha_default, api_key):
             "matricula": matricula
         }
         headers = {"x-api-key": api_key}
-        response = requests.get(base_url, params=params, headers=headers)
-
-        if response.status_code == 200:
+        
+        try:
+            response = requests.get(base_url, params=params, headers=headers)
+            response.raise_for_status()
             datos = response.json()
             if not datos:
                 st.warning("No se encontraron datos para ese día.")
                 return
-        else:
-            st.error(f"Error al consultar la API: {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            st.error(f"Error al consultar la API: {e}")
             return
 
         # Conversión a DataFrame
         df = pd.DataFrame(datos)
-        df["evTime"] = pd.to_datetime(df["evTime"])
+        df["evTime"] = pd.to_datetime(df["evTime"], errors='coerce')
         df["energyConsumption_ave"] = pd.to_numeric(df["energyConsumption"].apply(lambda x: x.get("ave", None)), errors='coerce')
         df["energyConsumption_rt"] = pd.to_numeric(df["energyConsumption"].apply(lambda x: x.get("rt", None)), errors='coerce')
         df["outsideTemp"] = pd.to_numeric(df["outsideTemp"], errors='coerce')
         df["insideTemp"] = pd.to_numeric(df["insideTemp"], errors='coerce')
+
+        # Validación de que las columnas necesarias no estén vacías
+        if df.empty:
+            st.warning("No hay datos válidos para graficar.")
+            return
 
         # Métricas generales
         distancia_total = df["mileage"].max() - df["mileage"].min()
@@ -80,19 +87,39 @@ def show_eficiencia_vehiculo(fecha_default, api_key):
         col21, col22 = st.columns(2)
         # Gráficos
         col21.subheader("🔋 Eficiencia energética (media)")
-        col21.line_chart(df.set_index("evTime")[["energyConsumption_ave"]])
+        if not df["energyConsumption_ave"].isnull().all():
+            col21.line_chart(df.set_index("evTime")[["energyConsumption_ave"]])
+        else:
+            col21.warning("No hay datos para la eficiencia energética (media).")
+
         col22.subheader("🔋 Eficiencia energética (tiempo real)")
-        col22.line_chart(df.set_index("evTime")[["energyConsumption_rt"]])
+        if not df["energyConsumption_rt"].isnull().all():
+            col22.line_chart(df.set_index("evTime")[["energyConsumption_rt"]])
+        else:
+            col22.warning("No hay datos para la eficiencia energética (tiempo real).")
 
         col31, col32 = st.columns(2)
         col31.subheader("🚗 Velocidad del vehículo")
-        col31.line_chart(df.set_index("evTime")[["speed"]])
+        if not df["speed"].isnull().all():
+            col31.line_chart(df.set_index("evTime")[["speed"]])
+        else:
+            col31.warning("No hay datos de velocidad.")
 
         col32.subheader("🔌 Nivel de batería (SOC)")
-        col32.line_chart(df.set_index("evTime")[["soc"]])
+        if not df["soc"].isnull().all():
+            col32.line_chart(df.set_index("evTime")[["soc"]])
+        else:
+            col32.warning("No hay datos de nivel de batería.")
 
         col41, col42 = st.columns(2)
         col41.subheader("🌡️ Temperatura exterior")
-        col41.line_chart(df.set_index("evTime")[["outsideTemp"]])
+        if not df["outsideTemp"].isnull().all():
+            col41.line_chart(df.set_index("evTime")[["outsideTemp"]])
+        else:
+            col41.warning("No hay datos de temperatura exterior.")
+
         col42.subheader("🌡️ Temperatura interior")
-        col42.line_chart(df.set_index("evTime")[["insideTemp"]])
+        if not df["insideTemp"].isnull().all():
+            col42.line_chart(df.set_index("evTime")[["insideTemp"]])
+        else:
+            col42.warning("No hay datos de temperatura interior.")
