@@ -48,7 +48,7 @@ def show_soc_analysis(fecha_default, api_key):
     vehiculo = next(veh for veh in vehiculos if veh["matricula"] == matricula)
     fecha = st.date_input("Fecha", fecha_default)
     bin_size = st.number_input("Tamaño del bin (min)", min_value=1, max_value=60, value=5)
-
+    # Reemplaza la parte dentro del if st.button("Consultar SOC"): por esto:
     if st.button("Consultar SOC"):
         base_url = "http://localhost:3000/plannerstats/BI/vehiculoiot-socbin"
         params = {
@@ -72,18 +72,16 @@ def show_soc_analysis(fecha_default, api_key):
                 df["timestamp"] = pd.to_datetime(df["_id"].apply(lambda x: x["interval"]))
                 df = df.sort_values("timestamp")
 
-                # Resaltar los valores donde el SOC esté por debajo del 20%
                 low_soc_mask = df['avgSOC'] < 20
                 low_soc_points = df[low_soc_mask]
 
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=df["timestamp"], y=df["avgSOC"], mode="lines", name="SOC promedio", line=dict(color="blue")))
-                fig.add_trace(go.Scatter(x=low_soc_points["timestamp"], y=low_soc_points["avgSOC"], mode="markers", name="SOC bajo (bajo 20%)", marker=dict(color="red", size=10, symbol="x")))
+                fig_soc = go.Figure()
+                fig_soc.add_trace(go.Scatter(x=df["timestamp"], y=df["avgSOC"], mode="lines", name="SOC promedio", line=dict(color="blue")))
+                fig_soc.add_trace(go.Scatter(x=low_soc_points["timestamp"], y=low_soc_points["avgSOC"], mode="markers", name="SOC bajo (bajo 20%)", marker=dict(color="red", size=10, symbol="x")))
+                fig_soc.add_trace(go.Scatter(x=df["timestamp"], y=df["maxSOC"], mode="lines", name="SOC máximo", line=dict(width=0), showlegend=False))
+                fig_soc.add_trace(go.Scatter(x=df["timestamp"], y=df["minSOC"], mode="lines", name="SOC mínimo", fill='tonexty', fillcolor='rgba(0,100,80,0.2)', line=dict(width=0), showlegend=False))
 
-                fig.add_trace(go.Scatter(x=df["timestamp"], y=df["maxSOC"], mode="lines", name="SOC máximo", line=dict(width=0), showlegend=False))
-                fig.add_trace(go.Scatter(x=df["timestamp"], y=df["minSOC"], mode="lines", name="SOC mínimo", fill='tonexty', fillcolor='rgba(0,100,80,0.2)', line=dict(width=0), showlegend=False))
-
-                fig.update_layout(
+                fig_soc.update_layout(
                     title="SOC durante el día",
                     xaxis_title="Hora",
                     yaxis_title="SOC (%)",
@@ -91,26 +89,27 @@ def show_soc_analysis(fecha_default, api_key):
                     hovermode="x unified"
                 )
 
-                st.plotly_chart(fig, use_container_width=True)
+                # Diseño de columnas
+                col1, col2 = st.columns([2, 1])  # Columna izquierda 2 veces más grande que la derecha
 
-                # Alerta de bajo SOC
-                if not low_soc_points.empty:
-                    st.warning("🚨 ¡Alerta! El vehículo está por debajo del 20% de SOC y debe regresar a la cochera.")
-                
-                st.subheader("📋 Tabla de datos")
+                with col1:
+                    st.plotly_chart(fig_soc, use_container_width=True)
+                    if not low_soc_points.empty:
+                        st.warning("🚨 ¡Alerta! El vehículo está por debajo del 20% de SOC y debe regresar a la cochera.")
+
+                with col2:
+                    # Mostrar las gráficas de estado dentro de la segunda columna
+                    show_vehicle_status(matricula, fecha, api_key)
+
+                st.subheader("📋 Tabla de datos SOC")
                 st.dataframe(df[["timestamp", "minSOC", "avgSOC", "maxSOC", "count"]])
             else:
                 st.warning("No se encontraron datos.")
         else:
             st.error(f"Error al consultar la API: {response.status_code}")
-        # Mostrar el estado del vehículo
-        show_vehicle_status(matricula, fecha, api_key)
-
 
 def show_vehicle_status(matricula, fecha, api_key):
-    """Mostrar los registros del estado de un vehículo (carga, estatus de batería y estatus de vehículo)"""
-    st.subheader("📋 Estado del vehículo")
-
+    """Mostrar gráficas del estado de un vehículo"""
     base_url = f"http://localhost:3000/plannerstats/BI/vehiculoiot-status"
     params = {
         "fecha": fecha.strftime("%Y-%m-%d"),
@@ -131,19 +130,15 @@ def show_vehicle_status(matricula, fecha, api_key):
             df_status = pd.DataFrame(data)
             df_status["evTime"] = pd.to_datetime(df_status["evTime"])
 
-            # Mapeo de los estados
-            gbStatus_map = {"Start": 1, "Stop": 2}  # Asignar valores numéricos
+            gbStatus_map = {"Start": 1, "Stop": 2}
             gbCharge_map = {"Exceptions": 1, "Charging": 2, "Complete": 3, "Not in Charging": 4}
-            evStatus_map = {"Charging": 1, "Parking": 2, "Driving": 3}  # Añadir mapeo de evStatus
+            evStatus_map = {"Charging": 1, "Parking": 2, "Driving": 3}
 
             df_status["gbStatus_num"] = df_status["gbStatus"].map(gbStatus_map)
             df_status["gbCharge_num"] = df_status["gbCharge"].map(gbCharge_map)
             df_status["evStatus_num"] = df_status["evStatus"].map(evStatus_map)
 
-            # Mostrar tabla de datos
-            st.dataframe(df_status[["evTime", "gbCharge", "gbStatus", "evStatus"]])
-
-            # Gráfica para gbStatus
+            # gbStatus
             fig_status = go.Figure()
             fig_status.add_trace(go.Scatter(
                 x=df_status["evTime"],
@@ -152,20 +147,18 @@ def show_vehicle_status(matricula, fecha, api_key):
                 name="gbStatus",
                 marker=dict(color="blue", size=8)
             ))
-
             fig_status.update_layout(
-                title="Estado del vehículo (gbStatus) a lo largo del día",
+                title="gbStatus",
                 xaxis_title="Hora",
-                yaxis_title="Estado (gbStatus)",
                 yaxis=dict(tickvals=[1, 2], ticktext=["Start", "Stop"]),
-                height=400,
-                showlegend=True,
+                height=250,
+                showlegend=False,
+                margin=dict(t=30),
                 hovermode="x unified"
             )
-
             st.plotly_chart(fig_status, use_container_width=True)
 
-            # Gráfica para gbCharge
+            # gbCharge
             fig_charge = go.Figure()
             fig_charge.add_trace(go.Scatter(
                 x=df_status["evTime"],
@@ -174,20 +167,18 @@ def show_vehicle_status(matricula, fecha, api_key):
                 name="gbCharge",
                 marker=dict(color="green", size=8)
             ))
-
             fig_charge.update_layout(
-                title="Estado de carga del vehículo (gbCharge) a lo largo del día",
+                title="gbCharge",
                 xaxis_title="Hora",
-                yaxis_title="Estado de carga (gbCharge)",
                 yaxis=dict(tickvals=[1, 2, 3, 4], ticktext=["Exceptions", "Charging", "Complete", "Not in Charging"]),
-                height=400,
-                showlegend=True,
+                height=250,
+                showlegend=False,
+                margin=dict(t=30),
                 hovermode="x unified"
             )
-
             st.plotly_chart(fig_charge, use_container_width=True)
 
-            # Gráfica para evStatus
+            # evStatus
             fig_evstatus = go.Figure()
             fig_evstatus.add_trace(go.Scatter(
                 x=df_status["evTime"],
@@ -196,24 +187,13 @@ def show_vehicle_status(matricula, fecha, api_key):
                 name="evStatus",
                 marker=dict(color="orange", size=8)
             ))
-
             fig_evstatus.update_layout(
-                title="Estado del vehículo (evStatus) a lo largo del día",
+                title="evStatus",
                 xaxis_title="Hora",
-                yaxis_title="Estado (evStatus)",
                 yaxis=dict(tickvals=[1, 2, 3], ticktext=["Charging", "Parking", "Driving"]),
-                height=400,
-                showlegend=True,
+                height=250,
+                showlegend=False,
+                margin=dict(t=30),
                 hovermode="x unified"
             )
-
             st.plotly_chart(fig_evstatus, use_container_width=True)
-
-        else:
-            st.warning("No se encontraron registros de estado para este vehículo.")
-    else:
-        st.error(f"Error al consultar el estado del vehículo: {response.status_code}")
-
-
-
-
